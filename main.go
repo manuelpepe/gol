@@ -1,33 +1,76 @@
 package main
 
 import (
+	"image/color"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/manuelpepe/gol/gol"
 )
 
 type GameOfLife struct {
 	cols, rows int
-	ticks      int
-	grid       []bool
+
+	ticks int
+
+	grid []bool
+
+	aliveImage *ebiten.Image
+	deadImage  *ebiten.Image
+
+	md metadata
 }
 
-func NewGameOfLife(x, y int) *GameOfLife {
+type metadata struct {
+	cellWidth  int
+	cellHeight int
+
+	usableWidth  int
+	usableHeight int
+
+	padding int
+}
+
+const PADDING = 1
+
+func newmetadata(width, height, x, y int) metadata {
+	usableWidth := width - x*PADDING
+	usableHeight := height - y*PADDING
+	return metadata{
+		usableWidth:  usableWidth,
+		usableHeight: usableHeight,
+
+		cellWidth:  usableWidth / x,
+		cellHeight: usableHeight / y,
+	}
+}
+
+func NewGameOfLife(width, height, x, y int) *GameOfLife {
+	md := newmetadata(width, height, x, y)
+
+	aliveImage := ebiten.NewImage(md.cellWidth, md.cellHeight)
+	aliveImage.Fill(color.White)
+	deadImage := ebiten.NewImage(md.cellWidth, md.cellHeight)
+	deadImage.Fill(color.Gray16{0x9999})
+
 	return &GameOfLife{
-		cols:  x,
-		rows:  y,
-		ticks: 0,
-		grid:  make([]bool, x*y),
+		cols:       x,
+		rows:       y,
+		ticks:      0,
+		grid:       make([]bool, x*y),
+		aliveImage: aliveImage,
+		deadImage:  deadImage,
+		md:         md,
 	}
 }
 
 // Max TPS as specified by ebiten
 const MAX_TPS = 60
 
+const DELAY = 1
+
 func (g *GameOfLife) Update() error {
-	interval := MAX_TPS * 2
+	interval := MAX_TPS * DELAY
 	g.ticks = (g.ticks + 1) % interval
 	if g.ticks == interval-1 {
 		g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
@@ -36,28 +79,34 @@ func (g *GameOfLife) Update() error {
 }
 
 func (g *GameOfLife) Draw(screen *ebiten.Image) {
-	str := ""
+	screen.Fill(color.Black)
 	for y := range g.rows {
 		for x := range g.cols {
-			if g.grid[y*g.rows+x] {
-				str += "[x] "
+			p := y*g.rows + x
+			opts := ebiten.DrawImageOptions{}
+			opts.GeoM.Translate(
+				float64((g.md.cellWidth+PADDING)*x),
+				float64((g.md.cellHeight+PADDING)*y),
+			)
+
+			if g.grid[p] {
+				screen.DrawImage(g.aliveImage, &opts)
 			} else {
-				str += "[ ] "
+				screen.DrawImage(g.deadImage, &opts)
 			}
 		}
-		str += "\n"
 	}
-	ebitenutil.DebugPrint(screen, str)
 }
 
 func (g *GameOfLife) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 320, 240
+	return outsideWidth, outsideHeight
 }
 
 func main() {
-	ebiten.SetWindowSize(640, 480)
+	W, H := 640, 480
+	ebiten.SetWindowSize(W, H)
 	ebiten.SetWindowTitle("Hello, World!")
-	game := NewGameOfLife(10, 10)
+	game := NewGameOfLife(W, H, 10, 10)
 
 	// block
 	// game.grid[10] = true
@@ -72,6 +121,11 @@ func main() {
 	game.grid[31] = true
 	game.grid[32] = true
 	game.grid[33] = true
+
+	// blinker
+	game.grid[46] = true
+	game.grid[47] = true
+	game.grid[48] = true
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
