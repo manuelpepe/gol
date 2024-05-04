@@ -46,9 +46,6 @@ var deltas = [3]int{-1, 0, 1}
 func CalcNeighs(p, X, Y int, grid []bool) int {
 	neighs := 0
 	for _, yd := range deltas {
-		// se apagan 10, 21
-		// se prenen 1, 8, 9
-
 		// skip top side check at boundry
 		if p < Y && yd == -1 {
 			continue

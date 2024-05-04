@@ -22,26 +22,34 @@ type GameOfLife struct {
 }
 
 type metadata struct {
+	cellWidthPrecise  float64
+	cellHeightPrecise float64
+
 	cellWidth  int
 	cellHeight int
 
 	usableWidth  int
 	usableHeight int
 
-	padding int
+	padding float64
 }
 
-const PADDING = 1
+const PADDING float64 = 1
 
 func newmetadata(width, height, x, y int) metadata {
-	usableWidth := width - x*PADDING
-	usableHeight := height - y*PADDING
+	usableWidth := int(float64(width) - float64(x)*PADDING)
+	usableHeight := int(float64(height) - float64(y)*PADDING)
 	return metadata{
 		usableWidth:  usableWidth,
 		usableHeight: usableHeight,
 
 		cellWidth:  usableWidth / x,
 		cellHeight: usableHeight / y,
+
+		cellWidthPrecise:  float64(usableWidth) / float64(x),
+		cellHeightPrecise: float64(usableHeight) / float64(y),
+
+		padding: PADDING,
 	}
 }
 
@@ -67,15 +75,39 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 // Max TPS as specified by ebiten
 const MAX_TPS = 60
 
-const DELAY = 1
+// Delay between updates
+const DELAY_SEC = 1
 
 func (g *GameOfLife) Update() error {
-	interval := MAX_TPS * DELAY
+	interval := MAX_TPS * DELAY_SEC
 	g.ticks = (g.ticks + 1) % interval
 	if g.ticks == interval-1 {
 		g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
 	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		ix, ok := g.getCursorPositionInGrid()
+		if ok {
+			g.grid[ix] = true
+		}
+	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+		ix, ok := g.getCursorPositionInGrid()
+		if ok {
+			g.grid[ix] = false
+		}
+	}
 	return nil
+}
+
+func (g *GameOfLife) getCursorPositionInGrid() (int, bool) {
+	x, y := ebiten.CursorPosition()
+	cx := int(float64(x) / (g.md.cellWidthPrecise + g.md.padding))
+	cy := int(float64(y) / (g.md.cellHeightPrecise + g.md.padding))
+	pos := cy*g.cols + cx
+	if pos >= 0 && pos < g.cols*g.rows {
+		return pos, true
+	}
+	return pos, false
 }
 
 func (g *GameOfLife) Draw(screen *ebiten.Image) {
@@ -85,8 +117,8 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 			p := y*g.rows + x
 			opts := ebiten.DrawImageOptions{}
 			opts.GeoM.Translate(
-				float64((g.md.cellWidth+PADDING)*x),
-				float64((g.md.cellHeight+PADDING)*y),
+				(g.md.cellWidthPrecise+g.md.padding)*float64(x),
+				(g.md.cellHeightPrecise+g.md.padding)*float64(y),
 			)
 
 			if g.grid[p] {
@@ -103,29 +135,10 @@ func (g *GameOfLife) Layout(outsideWidth, outsideHeight int) (screenWidth, scree
 }
 
 func main() {
-	W, H := 640, 480
+	W, H := 1024, 720
 	ebiten.SetWindowSize(W, H)
 	ebiten.SetWindowTitle("Hello, World!")
-	game := NewGameOfLife(W, H, 10, 10)
-
-	// block
-	// game.grid[10] = true
-	// game.grid[11] = true
-	// game.grid[20] = true
-	// game.grid[21] = true
-
-	// toad
-	game.grid[22] = true
-	game.grid[23] = true
-	game.grid[24] = true
-	game.grid[31] = true
-	game.grid[32] = true
-	game.grid[33] = true
-
-	// blinker
-	game.grid[46] = true
-	game.grid[47] = true
-	game.grid[48] = true
+	game := NewGameOfLife(W, H, 100, 100)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
