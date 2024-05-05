@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/manuelpepe/gol/gol"
+	"github.com/manuelpepe/gol/utils"
 )
 
 var (
@@ -40,6 +41,8 @@ type GameOfLife struct {
 	deadImage  *ebiten.Image
 
 	md metadata
+
+	touch *utils.TouchTracker
 }
 
 type metadata struct {
@@ -95,7 +98,7 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 		running: false,
 		ticks:   0,
 
-		delayOptions: []float64{2, 1, 0.5, 0.25, 0.1, 0.02},
+		delayOptions: []float64{1, 0.5, 0.25, 0.1, 0.02, 2},
 		delaySetting: 0,
 
 		grid: make([]bool, x*y),
@@ -104,6 +107,8 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 		deadImage:  deadImage,
 
 		md: md,
+
+		touch: utils.NewTouchTracker(),
 	}
 }
 
@@ -119,6 +124,11 @@ func (g *GameOfLife) Update() error {
 	if g.running && g.ticks == interval-1 {
 		g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
 	}
+	g.handleInputs()
+	return nil
+}
+
+func (g *GameOfLife) handleInputs() {
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		ix, ok := g.getCursorPositionInGrid()
 		if ok {
@@ -140,18 +150,34 @@ func (g *GameOfLife) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		g.grid = make([]bool, g.cols*g.rows)
 	}
-	return nil
+	g.handleTouches()
+}
+
+func (g *GameOfLife) handleTouches() {
+	g.touch.Update()
+	if g.touch.IsTripleTap() {
+		g.grid = make([]bool, g.cols*g.rows)
+	} else if g.touch.IsDoubleTap() {
+		g.running = !g.running
+	} else if g.touch.IsTouching() {
+		x, y, ok := g.touch.GetFirstTouchPosition()
+		pos, ok2 := g.positionToCell(x, y)
+		if ok && ok2 {
+			g.grid[pos] = true
+		}
+	}
 }
 
 func (g *GameOfLife) getCursorPositionInGrid() (int, bool) {
 	x, y := ebiten.CursorPosition()
+	return g.positionToCell(x, y)
+}
+
+func (g *GameOfLife) positionToCell(x, y int) (int, bool) {
 	cx := int(float64(x) / (g.md.cellWidthPrecise + g.md.padding))
 	cy := int(float64(y) / (g.md.cellHeightPrecise + g.md.padding))
 	pos := cy*g.cols + cx
-	if pos >= 0 && pos < g.cols*g.rows {
-		return pos, true
-	}
-	return pos, false
+	return pos, pos >= 0 && pos < g.cols*g.rows
 }
 
 func (g *GameOfLife) nextSpeedModifier() {
