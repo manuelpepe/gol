@@ -83,7 +83,7 @@ func newmetadata(width, height, x, y int) metadata {
 	}
 }
 
-func NewGameOfLife(width, height, x, y int) *GameOfLife {
+func NewGestureDemo(width, height, x, y int) *GameOfLife {
 	md := newmetadata(width, height, x, y)
 
 	aliveImage := ebiten.NewImage(md.cellWidth, md.cellHeight)
@@ -155,10 +155,22 @@ func (g *GameOfLife) handleInputs() {
 
 func (g *GameOfLife) handleTouches() {
 	g.touch.Update()
-	if g.touch.IsTripleTap() {
+
+	if g.touch.IsTouchingThree() {
 		g.grid = make([]bool, g.cols*g.rows)
-	} else if g.touch.IsDoubleTap() {
-		g.running = !g.running
+	} else if g.touch.IsTouchingTwo() {
+		if pan := g.touch.Pan(); pan != nil {
+			deltaX := pan.OriginX - pan.PrevX
+			if deltaX < -10 {
+				// swipe right
+				g.nextSpeedModifier()
+			} else if deltaX > 10 {
+				// swipe left
+				g.running = false
+			}
+		} else {
+			g.running = true
+		}
 	} else if g.touch.IsTouching() {
 		x, y, ok := g.touch.GetFirstTouchPosition()
 		pos, ok2 := g.positionToCell(x, y)
@@ -224,7 +236,7 @@ func main() {
 	W, H := 1024, 720
 	ebiten.SetWindowSize(W, H)
 	ebiten.SetWindowTitle("Hello, World!")
-	game := NewGameOfLife(W, H, 100, 100)
+	game := NewGestureDemo(W, H, 100, 100)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
