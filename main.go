@@ -1,17 +1,38 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"image/color"
 	"log"
 
+	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/manuelpepe/gol/gol"
 )
+
+var (
+	mplusFaceSource *text.GoTextFaceSource
+)
+
+func init() {
+	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.MPlus1pRegular_ttf))
+	if err != nil {
+		log.Fatal(err)
+	}
+	mplusFaceSource = s
+}
 
 type GameOfLife struct {
 	cols, rows int
 
-	ticks int
+	ticks   int
+	running bool
+
+	delayOptions []float64
+	delaySetting int
 
 	grid []bool
 
@@ -22,6 +43,9 @@ type GameOfLife struct {
 }
 
 type metadata struct {
+	width  int
+	height int
+
 	cellWidthPrecise  float64
 	cellHeightPrecise float64
 
@@ -40,6 +64,9 @@ func newmetadata(width, height, x, y int) metadata {
 	usableWidth := int(float64(width) - float64(x)*PADDING)
 	usableHeight := int(float64(height) - float64(y)*PADDING)
 	return metadata{
+		width:  width,
+		height: height,
+
 		usableWidth:  usableWidth,
 		usableHeight: usableHeight,
 
@@ -62,13 +89,21 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 	deadImage.Fill(color.Gray16{0x9999})
 
 	return &GameOfLife{
-		cols:       x,
-		rows:       y,
-		ticks:      0,
-		grid:       make([]bool, x*y),
+		cols: x,
+		rows: y,
+
+		running: false,
+		ticks:   0,
+
+		delayOptions: []float64{2, 1, 0.5, 0.25, 0.1, 0.02},
+		delaySetting: 0,
+
+		grid: make([]bool, x*y),
+
 		aliveImage: aliveImage,
 		deadImage:  deadImage,
-		md:         md,
+
+		md: md,
 	}
 }
 
@@ -79,9 +114,9 @@ const MAX_TPS = 60
 const DELAY_SEC = 1
 
 func (g *GameOfLife) Update() error {
-	interval := MAX_TPS * DELAY_SEC
+	interval := int(MAX_TPS * g.delayOptions[g.delaySetting])
 	g.ticks = (g.ticks + 1) % interval
-	if g.ticks == interval-1 {
+	if g.running && g.ticks == interval-1 {
 		g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
 	}
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
@@ -96,6 +131,15 @@ func (g *GameOfLife) Update() error {
 			g.grid[ix] = false
 		}
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		g.running = !g.running
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
+		g.nextSpeedModifier()
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		g.grid = make([]bool, g.cols*g.rows)
+	}
 	return nil
 }
 
@@ -108,6 +152,10 @@ func (g *GameOfLife) getCursorPositionInGrid() (int, bool) {
 		return pos, true
 	}
 	return pos, false
+}
+
+func (g *GameOfLife) nextSpeedModifier() {
+	g.delaySetting = (g.delaySetting + 1) % len(g.delayOptions)
 }
 
 func (g *GameOfLife) Draw(screen *ebiten.Image) {
@@ -128,6 +176,18 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 			}
 		}
 	}
+
+	str := fmt.Sprintf("Speed: %.2fs", g.delayOptions[g.delaySetting])
+	textFace := &text.GoTextFace{
+		Source: mplusFaceSource,
+		Size:   24,
+	}
+	w, h := text.Measure(str, textFace, 0)
+	textOp := &text.DrawOptions{}
+	textOp.GeoM.Translate(w, h)
+	textOp.PrimaryAlign = text.AlignCenter
+	textOp.SecondaryAlign = text.AlignCenter
+	text.Draw(screen, str, textFace, textOp)
 }
 
 func (g *GameOfLife) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
