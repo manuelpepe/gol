@@ -22,20 +22,41 @@ type touch struct {
 	originX, originY int
 	currX, currY     int
 	duration         int
-	wasPinch, isPan  bool
+	isPinch, isPan   bool
 }
 
 type Pinch struct {
 	ID1, ID2 ebiten.TouchID
-	OriginH  float64
-	PrevH    float64
+
+	OriginDistance float64
+	Distance       float64
+
+	CenterX, CenterY int
 }
 
-type TwoFingerHPan struct {
+func (p Pinch) IsInward() bool {
+	return p.OriginDistance > p.Distance
+}
+
+func (p Pinch) IsOutward() bool {
+	return p.OriginDistance < p.Distance
+}
+
+type TwoFingerPan struct {
 	ID1, ID2 ebiten.TouchID
 
-	PrevX   int
-	OriginX int
+	LastX, LastY     int
+	OriginX, OriginY int
+
+	isHorizontal bool
+}
+
+func (p TwoFingerPan) IsHorizontal() bool {
+	return p.isHorizontal
+}
+
+func (p TwoFingerPan) IsVertical() bool {
+	return !p.isHorizontal
 }
 
 type Tap struct {
@@ -46,7 +67,7 @@ type TouchTracker struct {
 	touchIDs []ebiten.TouchID
 	touches  map[ebiten.TouchID]*touch
 	pinch    *Pinch
-	pan      *TwoFingerHPan
+	pan      *TwoFingerPan
 	taps     []Tap
 }
 
@@ -61,20 +82,24 @@ func NewTouchTracker() *TouchTracker {
 func (tt *TouchTracker) Update() {
 	// Clear the previous frame's taps.
 	tt.taps = tt.taps[:0]
-	// What touches have just ended?
+
+	// Handle released touches in this frame
 	for id, t := range tt.touches {
 		if inpututil.IsTouchJustReleased(id) {
+			// clear pinch if part of it was released
 			if tt.pinch != nil && (id == tt.pinch.ID1 || id == tt.pinch.ID2) {
 				tt.pinch = nil
 			}
+
+			// clear pan if part of it was released
 			if tt.pan != nil && (id == tt.pan.ID1 || id == tt.pan.ID2) {
 				tt.pan = nil
 			}
 
 			// If this one has not been touched long (30 frames can be assumed
-			// to be 500ms), or moved far, then it's a tap.
+			// to be 500ms), or moved far, then record tap.
 			diff := distance2d(t.originX, t.originY, t.currX, t.currY)
-			if !t.wasPinch && !t.isPan && (t.duration <= 30 || diff < 2) {
+			if !t.isPinch && !t.isPan && (t.duration <= 30 || diff < 2) {
 				tt.taps = append(tt.taps, Tap{
 					X: t.currX,
 					Y: t.currY,
@@ -85,7 +110,7 @@ func (tt *TouchTracker) Update() {
 		}
 	}
 
-	// What touches are new in this frame?
+	// Store new touches in this frame
 	tt.touchIDs = inpututil.AppendJustPressedTouchIDs(tt.touchIDs[:0])
 	for _, id := range tt.touchIDs {
 		x, y := ebiten.TouchPosition(id)
@@ -95,6 +120,7 @@ func (tt *TouchTracker) Update() {
 		}
 	}
 
+	// Store all touchIDs (new and old) in this frame
 	tt.touchIDs = ebiten.AppendTouchIDs(tt.touchIDs[:0])
 
 	// Update the current position and durations of any touches that have
@@ -116,14 +142,20 @@ func (tt *TouchTracker) Update() {
 		t1, t2 := tt.touches[id1], tt.touches[id2]
 		originDiff := distance2d(t1.originX, t1.originY, t2.originX, t2.originY)
 		currDiff := distance2d(t1.currX, t1.currY, t2.currX, t2.currY)
-		if tt.pinch == nil && tt.pan == nil && math.Abs(originDiff-currDiff) > 10 {
-			t1.wasPinch = true
-			t2.wasPinch = true
-			tt.pinch = &Pinch{
-				ID1:     id1,
-				ID2:     id2,
-				OriginH: originDiff,
-				PrevH:   originDiff,
+		if tt.pan == nil && math.Abs(originDiff-currDiff) > 10 {
+			if tt.pinch == nil {
+				t1.isPinch = true
+				t2.isPinch = true
+				tt.pinch = &Pinch{
+					ID1:            id1,
+					ID2:            id2,
+					OriginDistance: originDiff,
+					Distance:       currDiff,
+					CenterX:        (t1.currX + t2.currX) / 2,
+					CenterY:        (t1.currY + t2.currY) / 2,
+				}
+			} else {
+				tt.pinch.Distance = currDiff
 			}
 		}
 
@@ -132,16 +164,26 @@ func (tt *TouchTracker) Update() {
 		// moved horizontally by an arbitraty margin
 		id, id2 := tt.touchIDs[0], tt.touchIDs[1]
 		t, t2 := tt.touches[id], tt.touches[1]
-		if !t.wasPinch && tt.pan == nil && tt.pinch == nil {
-			diff := distance(t.originX, t.currX)
-			if math.Abs(diff) > 10 {
+		diffX := distance(t.originX, t.currX)
+		diffY := distance(t.originY, t.currY)
+		if tt.pinch == nil {
+			if tt.pan == nil && (math.Abs(diffX) > 10 || math.Abs(diffY) > 10) {
 				t.isPan = true
 				t2.isPan = true
-				tt.pan = &TwoFingerHPan{
-					ID1:     id,
-					ID2:     id2,
-					OriginX: t.originX,
-					PrevX:   t.currX,
+				tt.pan = &TwoFingerPan{
+					ID1:          id,
+					ID2:          id2,
+					OriginX:      t.originX,
+					LastX:        t.currX,
+					OriginY:      t.originY,
+					LastY:        t.currY,
+					isHorizontal: math.Abs(diffX) > 10,
+				}
+			} else if tt.pan != nil {
+				if tt.pan.IsHorizontal() {
+					tt.pan.LastX = t.currX
+				} else {
+					tt.pan.LastY = t.currY
 				}
 			}
 		}
@@ -161,7 +203,28 @@ func (tt *TouchTracker) IsTouching() bool {
 	return len(tt.touchIDs) > 0
 }
 
-func (tt *TouchTracker) Pan() *TwoFingerHPan {
+func (tt *TouchTracker) TappedThree() (Tap, Tap, Tap, bool) {
+	if len(tt.taps) == 3 {
+		return tt.taps[0], tt.taps[1], tt.taps[2], true
+	}
+	return Tap{}, Tap{}, Tap{}, false
+}
+
+func (tt *TouchTracker) TappedTwo() (Tap, Tap, bool) {
+	if len(tt.taps) == 2 {
+		return tt.taps[0], tt.taps[1], true
+	}
+	return Tap{}, Tap{}, false
+}
+
+func (tt *TouchTracker) Tapped() (Tap, bool) {
+	if len(tt.taps) == 1 {
+		return tt.taps[0], true
+	}
+	return Tap{}, false
+}
+
+func (tt *TouchTracker) Pan() *TwoFingerPan {
 	return tt.pan
 }
 

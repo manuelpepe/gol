@@ -156,20 +156,18 @@ func (g *GameOfLife) handleInputs() {
 func (g *GameOfLife) handleTouches() {
 	g.touch.Update()
 
-	if g.touch.IsTouchingThree() {
+	if _, _, _, ok := g.touch.TappedThree(); ok {
 		g.grid = make([]bool, g.cols*g.rows)
-	} else if g.touch.IsTouchingTwo() {
-		if pan := g.touch.Pan(); pan != nil {
-			deltaX := pan.OriginX - pan.PrevX
-			if deltaX < -10 {
-				// swipe right
-				g.nextSpeedModifier()
-			} else if deltaX > 10 {
-				// swipe left
-				g.running = false
-			}
-		} else {
-			g.running = true
+	} else if _, _, ok := g.touch.TappedTwo(); ok {
+		g.running = !g.running
+	} else if pan := g.touch.Pan(); pan != nil {
+		deltaX := pan.OriginX - pan.LastX
+		if deltaX < -10 {
+			// swipe right
+			g.nextSpeedModifier()
+		} else if deltaX > 10 {
+			// swipe left
+			g.running = false
 		}
 	} else if g.touch.IsTouching() {
 		x, y, ok := g.touch.GetFirstTouchPosition()

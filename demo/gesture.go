@@ -29,6 +29,9 @@ type Gesture struct {
 	w, h int
 
 	touch *utils.TouchTracker
+
+	tapCounter int
+	tapMessage string
 }
 
 func NewGestureDemo(width, height int) *Gesture {
@@ -53,7 +56,17 @@ func (g *Gesture) Update() error {
 }
 
 func (g *Gesture) Draw(screen *ebiten.Image) {
-	msgs := make([]string, 3)
+	msgs := make([]string, 4)
+
+	if g.tapMessage != "" {
+		msgs = append(msgs, g.tapMessage)
+		g.tapCounter++
+		if g.tapCounter > 90 {
+			g.tapMessage = ""
+			g.tapCounter = 0
+		}
+	}
+
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
 		vector.DrawFilledCircle(screen, float32(x), float32(y), 5, color.RGBA{0, 0, 255, 1}, true)
@@ -65,26 +78,59 @@ func (g *Gesture) Draw(screen *ebiten.Image) {
 		msgs = append(msgs, "right mouse button")
 	}
 
+	if _, _, _, ok := g.touch.TappedThree(); ok {
+		g.tapMessage = "tapped three"
+		g.tapCounter = 0
+	} else if _, _, ok := g.touch.TappedTwo(); ok {
+		g.tapMessage = "tapped two"
+		g.tapCounter = 0
+	}
+
 	if g.touch.IsTouchingThree() {
 		msgs = append(msgs, "touching three")
 	} else if g.touch.IsTouchingTwo() {
 		msgs = append(msgs, "touching two")
 		if pan := g.touch.Pan(); pan != nil {
-			msgs = append(msgs, "pan")
-			deltaX := pan.OriginX - pan.PrevX
-			if deltaX < -10 {
-				msgs = append(msgs, fmt.Sprintf("swipe right - delta: %d", deltaX))
-			} else if deltaX > 10 {
-				msgs = append(msgs, fmt.Sprintf("swipe left - delta: %d", deltaX))
+			if pan.IsHorizontal() {
+				msgs = append(msgs, "horizontal pan")
+				deltaX := pan.OriginX - pan.LastX
+				if deltaX < -10 {
+					msgs = append(msgs, fmt.Sprintf("swipe right - delta: %d", deltaX))
+				} else if deltaX > 10 {
+					msgs = append(msgs, fmt.Sprintf("swipe left - delta: %d", deltaX))
+				}
+
+				vector.DrawFilledCircle(screen, float32(pan.OriginX), float32(g.h)/2, 5, color.RGBA{255, 0, 0, 1}, true)
+				vector.DrawFilledCircle(screen, float32(pan.LastX), float32(g.h)/2, 5, color.RGBA{0, 255, 0, 1}, true)
+				vector.StrokeLine(screen, float32(pan.OriginX), float32(g.h)/2, float32(pan.LastX), float32(g.h)/2, 1, color.White, true)
 			}
 
-			vector.DrawFilledCircle(screen, float32(pan.OriginX), float32(g.h)/2, 5, color.RGBA{255, 0, 0, 1}, true)
-			vector.DrawFilledCircle(screen, float32(pan.PrevX), float32(g.h)/2, 5, color.RGBA{0, 255, 0, 1}, true)
-			vector.StrokeLine(screen, float32(pan.OriginX), float32(g.h)/2, float32(pan.PrevX), float32(g.h)/2, 1, color.White, true)
+			if pan.IsVertical() {
+				msgs = append(msgs, "vertical pan")
+				deltaY := pan.OriginY - pan.LastY
+				if deltaY < -10 {
+					msgs = append(msgs, fmt.Sprintf("swipe up - delta: %d", deltaY))
+				} else if deltaY > 10 {
+					msgs = append(msgs, fmt.Sprintf("swipe down - delta: %d", deltaY))
+				}
+
+				vector.DrawFilledCircle(screen, float32(g.w)/2, float32(pan.OriginY), 5, color.RGBA{255, 0, 0, 1}, true)
+				vector.DrawFilledCircle(screen, float32(g.w)/2, float32(pan.LastY), 5, color.RGBA{0, 255, 0, 1}, true)
+				vector.StrokeLine(screen, float32(g.w)/2, float32(pan.OriginY), float32(g.w)/2, float32(pan.LastY), 1, color.White, true)
+			}
 		}
 
 		if pinch := g.touch.Pinch(); pinch != nil {
-			msgs = append(msgs, "pinch")
+			if pinch.IsInward() {
+				msgs = append(msgs, "inward pinch")
+			}
+			if pinch.IsOutward() {
+				msgs = append(msgs, "outward pinch")
+			}
+
+			vector.DrawFilledCircle(screen, float32(pinch.CenterX)-float32(pinch.Distance/2), float32(pinch.CenterY), 5, color.RGBA{255, 0, 0, 1}, true)
+			vector.DrawFilledCircle(screen, float32(pinch.CenterX)+float32(pinch.Distance/2), float32(pinch.CenterY), 5, color.RGBA{0, 255, 0, 1}, true)
+			vector.StrokeLine(screen, float32(pinch.CenterX)-float32(pinch.Distance/2), float32(pinch.CenterY), float32(pinch.CenterX)+float32(pinch.Distance/2), float32(pinch.CenterY), 1, color.White, true)
 		}
 	} else if g.touch.IsTouching() {
 		x, y, _ := g.touch.GetFirstTouchPosition()
