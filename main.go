@@ -98,7 +98,7 @@ func NewGestureDemo(width, height, x, y int) *GameOfLife {
 		running: false,
 		ticks:   0,
 
-		delayOptions: []float64{1, 0.5, 0.25, 0.1, 0.02, 2},
+		delayOptions: []float64{0.1, 0.05, 0.02, 0.2},
 		delaySetting: 0,
 
 		grid: make([]bool, x*y),
