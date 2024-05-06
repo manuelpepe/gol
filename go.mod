@@ -5,6 +5,7 @@ go 1.22.0
 require (
 	github.com/hajimehoshi/ebiten v1.12.12
 	github.com/hajimehoshi/ebiten/v2 v2.7.3
+	github.com/manuelpepe/ebiten-touchutils v0.0.0-20240506223319-3951280df1fc
 )
 
 require (

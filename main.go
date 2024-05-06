@@ -10,8 +10,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	touchutils "github.com/manuelpepe/ebiten-touchutils"
 	"github.com/manuelpepe/gol/gol"
-	"github.com/manuelpepe/gol/utils"
 )
 
 var (
@@ -42,7 +42,7 @@ type GameOfLife struct {
 
 	md metadata
 
-	touch *utils.TouchTracker
+	touch *touchutils.TouchTracker
 }
 
 type metadata struct {
@@ -83,7 +83,7 @@ func newmetadata(width, height, x, y int) metadata {
 	}
 }
 
-func NewGestureDemo(width, height, x, y int) *GameOfLife {
+func NewGameOfLife(width, height, x, y int) *GameOfLife {
 	md := newmetadata(width, height, x, y)
 
 	aliveImage := ebiten.NewImage(md.cellWidth, md.cellHeight)
@@ -108,7 +108,7 @@ func NewGestureDemo(width, height, x, y int) *GameOfLife {
 
 		md: md,
 
-		touch: utils.NewTouchTracker(),
+		touch: touchutils.NewTouchTracker(),
 	}
 }
 
@@ -160,7 +160,7 @@ func (g *GameOfLife) handleTouches() {
 		g.grid = make([]bool, g.cols*g.rows)
 	} else if _, _, ok := g.touch.TappedTwo(); ok {
 		g.running = !g.running
-	} else if pan := g.touch.Pan(); pan != nil {
+	} else if pan, ok := g.touch.TwoFingerPan(); ok {
 		deltaX := pan.OriginX - pan.LastX
 		if deltaX < -10 {
 			// swipe right
@@ -234,7 +234,7 @@ func main() {
 	W, H := 1024, 720
 	ebiten.SetWindowSize(W, H)
 	ebiten.SetWindowTitle("Hello, World!")
-	game := NewGestureDemo(W, H, 100, 100)
+	game := NewGameOfLife(W, H, 100, 100)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
