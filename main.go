@@ -8,6 +8,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	touchutils "github.com/manuelpepe/ebiten-touchutils"
@@ -73,11 +74,11 @@ func newmetadata(width, height, x, y int) metadata {
 		usableWidth:  usableWidth,
 		usableHeight: usableHeight,
 
-		cellWidth:  usableWidth / x,
-		cellHeight: usableHeight / y,
+		cellWidth:  max(1, usableWidth/x),
+		cellHeight: max(1, usableHeight/y),
 
-		cellWidthPrecise:  float64(usableWidth) / float64(x),
-		cellHeightPrecise: float64(usableHeight) / float64(y),
+		cellWidthPrecise:  max(1, float64(usableWidth)/float64(x)),
+		cellHeightPrecise: max(1, float64(usableHeight)/float64(y)),
 
 		padding: PADDING,
 	}
@@ -122,7 +123,7 @@ func (g *GameOfLife) Update() error {
 	interval := int(MAX_TPS * g.delayOptions[g.delaySetting])
 	g.ticks = (g.ticks + 1) % interval
 	if g.running && g.ticks == interval-1 {
-		g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
+		g.grid = gol.NextGridShader(g.cols, g.rows, g.grid)
 	}
 	g.handleInputs()
 	return nil
@@ -224,10 +225,12 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 	textOp.PrimaryAlign = text.AlignCenter
 	textOp.SecondaryAlign = text.AlignCenter
 	text.Draw(screen, str, textFace, textOp)
+
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %.2f\nFPS: %.2f", ebiten.ActualTPS(), ebiten.ActualFPS()))
 }
 
 func (g *GameOfLife) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return outsideWidth, outsideHeight
+	return g.md.width, g.md.height
 }
 
 func main() {
