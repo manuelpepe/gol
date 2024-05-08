@@ -12,7 +12,7 @@ func isAlive(pos vec2) float {
 	return 0
 }
 
-func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+func Fragment(_ vec4, srcPos vec2, _ vec4) vec4 {
 	alive := 0.0
 	pos := srcPos.xy
 

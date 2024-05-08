@@ -86,7 +86,7 @@ func NextGridShaderV2(X, Y int, grid []bool) []bool {
 		xPacketIx := 0
 		xPacketColor := color.RGBA{}
 		for x := range X {
-			if grid[y*Y+x] {
+			if grid[y*X+x] {
 				switch x % 4 {
 				case 0:
 					xPacketColor.R = 255
@@ -99,9 +99,11 @@ func NextGridShaderV2(X, Y int, grid []bool) []bool {
 				}
 			}
 			if x%4 == 3 {
-				gridImage.Set(xPacketIx, y, xPacketColor)
+				if xPacketColor != (color.RGBA{}) {
+					gridImage.Set(xPacketIx, y, xPacketColor)
+					xPacketColor = color.RGBA{}
+				}
 				xPacketIx += 1
-				xPacketColor = color.RGBA{}
 			}
 		}
 	}
