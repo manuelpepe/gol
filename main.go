@@ -41,7 +41,8 @@ type GameOfLife struct {
 	delayOptions []float64
 	delaySetting int
 
-	grid []bool
+	grid      []bool
+	useShader bool
 
 	aliveImage *ebiten.Image
 	deadImage  *ebiten.Image
@@ -87,6 +88,14 @@ func (md metadata) FullCellHeight() int {
 	return md.cellHeight + md.padding
 }
 
+func (md metadata) ScaledCellWidth(scale float64) float64 {
+	return float64(md.cellWidth)*scale + float64(md.padding)
+}
+
+func (md metadata) ScaledCellHeight(scale float64) float64 {
+	return float64(md.cellHeight)*scale + float64(md.padding)
+}
+
 func NewGameOfLife(width, height, x, y int) *GameOfLife {
 	md := newmetadata(width, height, x, y)
 
@@ -99,8 +108,9 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 		cols: x,
 		rows: y,
 
-		camX: 0,
-		camY: 0,
+		scale: 1,
+		camX:  0,
+		camY:  0,
 
 		running: false,
 		ticks:   0,
@@ -108,7 +118,8 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 		delayOptions: []float64{0.1, 0.05, 0.02, 0.2},
 		delaySetting: 0,
 
-		grid: make([]bool, x*y),
+		grid:      make([]bool, x*y),
+		useShader: true,
 
 		aliveImage: aliveImage,
 		deadImage:  deadImage,
@@ -129,7 +140,11 @@ func (g *GameOfLife) Update() error {
 	interval := int(MAX_TPS * g.delayOptions[g.delaySetting])
 	g.ticks = (g.ticks + 1) % interval
 	if g.running && g.ticks == interval-1 {
-		g.grid = gol.NextGridShader(g.cols, g.rows, g.grid)
+		if g.useShader {
+			g.grid = gol.NextGridShader(g.cols, g.rows, g.grid)
+		} else {
+			g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
+		}
 	}
 	g.handleInputs()
 	return nil
@@ -167,6 +182,17 @@ func (g *GameOfLife) handleInputs() {
 		if ok {
 			g.grid[ix] = false
 		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyKPAdd) {
+		g.scale = min(g.scale+0.1, 1.5)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyNumpadSubtract) || inpututil.IsKeyJustPressed(ebiten.KeyMinus) {
+		g.scale = max(g.scale-0.1, 0.5)
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyH) {
+		g.useShader = !g.useShader
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
@@ -212,11 +238,11 @@ func (g *GameOfLife) getCursorPositionInGrid() (int, bool) {
 }
 
 func (g *GameOfLife) positionToCell(x, y int) (int, bool) {
-	minX := int(math.Round(g.camX * float64(g.md.FullCellWidth())))
-	minY := int(math.Round(g.camY * float64(g.md.FullCellHeight())))
-	realX := (x + minX) / g.md.FullCellWidth()
-	realY := (y + minY) / g.md.FullCellHeight()
-	pos := realY*g.cols + realX
+	minX := int(math.Round(g.camX * float64(g.md.ScaledCellWidth(g.scale))))
+	minY := int(math.Round(g.camY * float64(g.md.ScaledCellHeight(g.scale))))
+	realX := float64(x+minX) / g.md.ScaledCellWidth(g.scale)
+	realY := float64(y+minY) / g.md.ScaledCellHeight(g.scale)
+	pos := int(realY)*g.cols + int(realX)
 	return pos, pos >= 0 && pos < g.cols*g.rows
 }
 
@@ -230,8 +256,8 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 	// screen boundries
 	minX := int(math.Floor(g.camX))
 	minY := int(math.Floor(g.camY))
-	maxX := g.md.width/g.md.FullCellWidth() + minX
-	maxY := g.md.height/g.md.FullCellHeight() + minY
+	maxX := int(float64(g.md.width)/g.md.ScaledCellWidth(g.scale) + float64(minX))
+	maxY := int(float64(g.md.height)/g.md.ScaledCellHeight(g.scale) + float64(minY))
 
 	for y := range g.rows {
 		if y < minY {
@@ -249,9 +275,10 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 
 			p := y*g.rows + x
 			opts := ebiten.DrawImageOptions{}
+			opts.GeoM.Scale(g.scale, g.scale)
 			opts.GeoM.Translate(
-				float64(g.md.FullCellWidth())*(float64(x)-g.camX),
-				float64(g.md.FullCellHeight())*(float64(y)-g.camY),
+				float64(g.md.ScaledCellWidth(g.scale))*(float64(x)-g.camX),
+				float64(g.md.ScaledCellWidth(g.scale))*(float64(y)-g.camY),
 			)
 
 			if g.grid[p] {
@@ -278,7 +305,14 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 	x, y := ebiten.CursorPosition()
 
 	ebitenutil.DebugPrint(screen,
-		fmt.Sprintf("TPS: %.2f\nFPS: %.2f\n\n\n\n\np: %d - x: %d y: %d\nminx: %.2f miny: %.2f", ebiten.ActualTPS(), ebiten.ActualFPS(), v, x, y, g.camX, g.camY),
+		fmt.Sprintf(
+			"TPS: %.2f\nFPS: %.2f\n\n\n\n\np: %d - x: %d y: %d\ncamx: %.2f camy: %.2f\nscale: %.2f\nscaled size: %.2f\nshader: %v",
+			ebiten.ActualTPS(), ebiten.ActualFPS(),
+			v, x, y,
+			g.camX, g.camY,
+			g.scale,
+			g.md.ScaledCellWidth(g.scale),
+			g.useShader),
 	)
 }
 
