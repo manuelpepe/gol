@@ -41,8 +41,8 @@ type GameOfLife struct {
 	delayOptions []float64
 	delaySetting int
 
-	grid      []bool
-	useShader bool
+	grid   []bool
+	shader int
 
 	aliveImage *ebiten.Image
 	deadImage  *ebiten.Image
@@ -118,8 +118,8 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 		delayOptions: []float64{0.1, 0.05, 0.02, 0.2},
 		delaySetting: 0,
 
-		grid:      make([]bool, x*y),
-		useShader: true,
+		grid:   make([]bool, x*y),
+		shader: 0,
 
 		aliveImage: aliveImage,
 		deadImage:  deadImage,
@@ -140,10 +140,13 @@ func (g *GameOfLife) Update() error {
 	interval := int(MAX_TPS * g.delayOptions[g.delaySetting])
 	g.ticks = (g.ticks + 1) % interval
 	if g.running && g.ticks == interval-1 {
-		if g.useShader {
-			g.grid = gol.NextGridShader(g.cols, g.rows, g.grid)
-		} else {
+		switch g.shader {
+		case 0:
 			g.grid = gol.NextGrid(g.cols, g.rows, g.grid)
+		case 1:
+			g.grid = gol.NextGridShader(g.cols, g.rows, g.grid)
+		case 2:
+			g.grid = gol.NextGridShaderV2(g.cols, g.rows, g.grid)
 		}
 	}
 	g.handleInputs()
@@ -192,7 +195,7 @@ func (g *GameOfLife) handleInputs() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyH) {
-		g.useShader = !g.useShader
+		g.shader = (g.shader + 1) % 3
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
@@ -312,7 +315,7 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 			g.camX, g.camY,
 			g.scale,
 			g.md.ScaledCellWidth(g.scale),
-			g.useShader),
+			g.shader),
 	)
 }
 
@@ -331,7 +334,7 @@ func main() {
 	W, H := 1024, 720
 	ebiten.SetWindowSize(W, H)
 	ebiten.SetWindowTitle("Hello, World!")
-	game := NewGameOfLife(W, H, 5000, 5000)
+	game := NewGameOfLife(W, H, 400, 400)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}

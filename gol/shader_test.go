@@ -190,19 +190,30 @@ func TestShaderCountNeighs(t *testing.T) {
 
 var dumpList []bool
 
+type t struct {
+	w, h int
+}
+
+var ts = []t{
+	{12, 12},
+	{100, 100},
+	{1000, 1000},
+	{3000, 3000},
+}
+
+func BenchmarkNextGridShaderV2(b *testing.B) {
+	for _, tt := range ts {
+		l := make([]bool, tt.w*tt.h)
+		b.Run(fmt.Sprintf("window-(H:%d-W:%d)", tt.h, tt.w), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				l = NextGridShaderV2(tt.w, tt.h, l)
+			}
+		})
+		dumpList = l
+	}
+}
+
 func BenchmarkNextGridShader(b *testing.B) {
-	type t struct {
-		w, h int
-	}
-
-	ts := []t{
-		{10, 10},
-		{50, 50},
-		{100, 100},
-		{1000, 1000},
-		{10000, 10000},
-	}
-
 	for _, tt := range ts {
 		l := make([]bool, tt.w*tt.h)
 		b.Run(fmt.Sprintf("window-(H:%d-W:%d)", tt.h, tt.w), func(b *testing.B) {
@@ -212,22 +223,9 @@ func BenchmarkNextGridShader(b *testing.B) {
 		})
 		dumpList = l
 	}
-
 }
 
 func BenchmarkNextGrid(b *testing.B) {
-	type t struct {
-		w, h int
-	}
-
-	ts := []t{
-		{10, 10},
-		{50, 50},
-		{100, 100},
-		{1000, 1000},
-		{10000, 10000},
-	}
-
 	for _, tt := range ts {
 		l := make([]bool, tt.w*tt.h)
 		b.Run(fmt.Sprintf("window-(H:%d-W:%d)", tt.h, tt.w), func(b *testing.B) {

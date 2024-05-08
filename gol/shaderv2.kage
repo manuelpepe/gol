@@ -1,0 +1,74 @@
+//go:build ignore
+
+//kage:unit pixels
+
+package gol
+
+func sidesForChannel(ch int) [3]int {
+	if ch == 0 {
+		return [3]int{3, 0, 1}
+	} else if ch == 1 {
+		return [3]int{0, 1, 2}
+	} else if ch == 2 {
+		return [3]int{1, 2, 3}
+	} else if ch == 3 {
+		return [3]int{2, 3, 0}
+	}
+	return [3]int{5, 5, 5}
+}
+
+func isAlive(pos vec2, ch int) int {
+	c := imageSrc0At(pos)
+	if c[ch] > 0 {
+		return 1
+	}
+	return 0
+}
+
+// ch will be RGBA, the channel being processed (not the nighbour)
+// xDir is -1, 0, 1
+// returns the X component used to get the pixel that's needed
+func getPacketOffsetForX(xDir int, ch int) float {
+	if xDir == 1 && ch == 3 {
+		return 1.0
+	}
+	if xDir == -1 && ch == 0 {
+		return -1.0
+	}
+	return 0.0
+}
+
+func countNeighs(pos vec2, chCur int) int {
+	channels := sidesForChannel(chCur)
+	deltas := [...]int{-1, 0, 1}
+	alive := 0
+	for y := 0; y < 3; y++ {
+		yOffset := float(deltas[y])
+		for x := 0; x < 3; x++ {
+			if x == 1 && y == 1 {
+				continue
+			}
+			xOffset := getPacketOffsetForX(deltas[x], chCur)
+			offset := vec2(xOffset, yOffset)
+			alive += isAlive(pos.xy+offset, channels[x])
+		}
+	}
+	return alive
+}
+
+func Fragment(_ vec4, pos vec2, _ vec4) vec4 {
+	out := vec4(0, 0, 0, 0)
+	for ch := 0; ch < 4; ch++ {
+		alive := countNeighs(pos, ch)
+		status := imageSrc0At(pos)[ch]
+		if alive < 2 {
+			status = 0.0
+		} else if alive > 3 {
+			status = 0.0
+		} else if alive == 3 {
+			status = 255
+		}
+		out[ch] = status
+	}
+	return out
+}
