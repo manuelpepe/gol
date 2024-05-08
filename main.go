@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -30,6 +31,10 @@ func init() {
 type GameOfLife struct {
 	cols, rows int
 
+	scale                  float64
+	camX, camY             float64
+	panOriginX, panOriginY float64
+
 	ticks   int
 	running bool
 
@@ -50,38 +55,36 @@ type metadata struct {
 	width  int
 	height int
 
-	cellWidthPrecise  float64
-	cellHeightPrecise float64
-
 	cellWidth  int
 	cellHeight int
 
-	usableWidth  int
-	usableHeight int
-
-	padding float64
+	padding int
 }
 
-const PADDING float64 = 1
+const PADDING int = 1
 
 func newmetadata(width, height, x, y int) metadata {
-	usableWidth := int(float64(width) - float64(x)*PADDING)
-	usableHeight := int(float64(height) - float64(y)*PADDING)
 	return metadata{
 		width:  width,
 		height: height,
 
-		usableWidth:  usableWidth,
-		usableHeight: usableHeight,
-
-		cellWidth:  max(1, usableWidth/x),
-		cellHeight: max(1, usableHeight/y),
-
-		cellWidthPrecise:  max(1, float64(usableWidth)/float64(x)),
-		cellHeightPrecise: max(1, float64(usableHeight)/float64(y)),
+		cellWidth:  10,
+		cellHeight: 10,
 
 		padding: PADDING,
 	}
+}
+
+func (md metadata) FullCellSize() (int, int) {
+	return md.FullCellWidth(), md.FullCellHeight()
+}
+
+func (md metadata) FullCellWidth() int {
+	return md.cellWidth + md.padding
+}
+
+func (md metadata) FullCellHeight() int {
+	return md.cellHeight + md.padding
 }
 
 func NewGameOfLife(width, height, x, y int) *GameOfLife {
@@ -95,6 +98,9 @@ func NewGameOfLife(width, height, x, y int) *GameOfLife {
 	return &GameOfLife{
 		cols: x,
 		rows: y,
+
+		camX: 0,
+		camY: 0,
 
 		running: false,
 		ticks:   0,
@@ -130,6 +136,26 @@ func (g *GameOfLife) Update() error {
 }
 
 func (g *GameOfLife) handleInputs() {
+	// handle map panning
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonMiddle) {
+		x, y := ebiten.CursorPosition()
+		g.panOriginX = float64(x)
+		g.panOriginY = float64(y)
+	}
+	if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonMiddle) {
+		g.panOriginX = 0
+		g.panOriginY = 0
+	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
+		x, y := ebiten.CursorPosition()
+		offsetX := (g.panOriginX - float64(x)) * 0.01
+		offsetY := (g.panOriginY - float64(y)) * 0.01
+		g.camX += offsetX
+		g.camY += offsetY
+		g.camX = min(float64(g.md.FullCellWidth()*g.cols-g.md.width)/float64(g.md.FullCellWidth()), max(0, g.camX))
+		g.camY = min(float64(g.md.FullCellHeight()*g.rows-g.md.height)/float64(g.md.FullCellHeight()), max(0, g.camY))
+	}
+
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		ix, ok := g.getCursorPositionInGrid()
 		if ok {
@@ -142,6 +168,7 @@ func (g *GameOfLife) handleInputs() {
 			g.grid[ix] = false
 		}
 	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		g.running = !g.running
 	}
@@ -185,9 +212,11 @@ func (g *GameOfLife) getCursorPositionInGrid() (int, bool) {
 }
 
 func (g *GameOfLife) positionToCell(x, y int) (int, bool) {
-	cx := int(float64(x) / (g.md.cellWidthPrecise + g.md.padding))
-	cy := int(float64(y) / (g.md.cellHeightPrecise + g.md.padding))
-	pos := cy*g.cols + cx
+	minX := int(math.Round(g.camX * float64(g.md.FullCellWidth())))
+	minY := int(math.Round(g.camY * float64(g.md.FullCellHeight())))
+	realX := (x + minX) / g.md.FullCellWidth()
+	realY := (y + minY) / g.md.FullCellHeight()
+	pos := realY*g.cols + realX
 	return pos, pos >= 0 && pos < g.cols*g.rows
 }
 
@@ -197,13 +226,32 @@ func (g *GameOfLife) nextSpeedModifier() {
 
 func (g *GameOfLife) Draw(screen *ebiten.Image) {
 	screen.Fill(color.Black)
+
+	// screen boundries
+	minX := int(math.Floor(g.camX))
+	minY := int(math.Floor(g.camY))
+	maxX := g.md.width/g.md.FullCellWidth() + minX
+	maxY := g.md.height/g.md.FullCellHeight() + minY
+
 	for y := range g.rows {
+		if y < minY {
+			continue // don't draw off screen
+		}
+
+		if y > maxY {
+			break // stop drawing off screen
+		}
+
 		for x := range g.cols {
+			if x < minX || x > maxX {
+				continue // don't draw off screen
+			}
+
 			p := y*g.rows + x
 			opts := ebiten.DrawImageOptions{}
 			opts.GeoM.Translate(
-				(g.md.cellWidthPrecise+g.md.padding)*float64(x),
-				(g.md.cellHeightPrecise+g.md.padding)*float64(y),
+				float64(g.md.FullCellWidth())*(float64(x)-g.camX),
+				float64(g.md.FullCellHeight())*(float64(y)-g.camY),
 			)
 
 			if g.grid[p] {
@@ -226,18 +274,30 @@ func (g *GameOfLife) Draw(screen *ebiten.Image) {
 	textOp.SecondaryAlign = text.AlignCenter
 	text.Draw(screen, str, textFace, textOp)
 
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %.2f\nFPS: %.2f", ebiten.ActualTPS(), ebiten.ActualFPS()))
+	v, _ := g.getCursorPositionInGrid()
+	x, y := ebiten.CursorPosition()
+
+	ebitenutil.DebugPrint(screen,
+		fmt.Sprintf("TPS: %.2f\nFPS: %.2f\n\n\n\n\np: %d - x: %d y: %d\nminx: %.2f miny: %.2f", ebiten.ActualTPS(), ebiten.ActualFPS(), v, x, y, g.camX, g.camY),
+	)
 }
 
-func (g *GameOfLife) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return g.md.width, g.md.height
+func (g *GameOfLife) Layout(_, _ int) (_, _ int) {
+	panic("unused in favor of LayoutF")
+}
+
+func (_ *GameOfLife) LayoutF(logicWinWidth, logicWinHeight float64) (float64, float64) {
+	scale := ebiten.Monitor().DeviceScaleFactor()
+	canvasWidth := math.Ceil(logicWinWidth * scale)
+	canvasHeight := math.Ceil(logicWinHeight * scale)
+	return canvasWidth, canvasHeight
 }
 
 func main() {
 	W, H := 1024, 720
 	ebiten.SetWindowSize(W, H)
 	ebiten.SetWindowTitle("Hello, World!")
-	game := NewGameOfLife(W, H, 100, 100)
+	game := NewGameOfLife(W, H, 5000, 5000)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
