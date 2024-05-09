@@ -198,7 +198,7 @@ var ts = []t{
 	{12, 12},
 	{100, 100},
 	{1000, 1000},
-	{3000, 3000},
+	{10000, 10000},
 }
 
 func BenchmarkNextGridShaderV2(b *testing.B) {
