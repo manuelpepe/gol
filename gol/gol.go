@@ -1,22 +1,5 @@
 package gol
 
-/*
-Grid operations:
-
-	p-X-1   p-X   p-X+1
-	 p-1     p     p+1
-	p+X-1   p+X   p+X+1
-
-Limits:
-
-	X = total cols
-	Y = total rows
-
-	- p % X == 0       => costado izq
-	- p % X == X-1     => costado der
-	- p < Y            => lado de arriba
-	- p >= X * Y - X   => lado de abajo
-*/
 func NextGrid(X, Y int, grid []bool) []bool {
 	if len(grid) != X*Y {
 		panic("grid doesn't match dimensions")
@@ -43,6 +26,21 @@ func NextGrid(X, Y int, grid []bool) []bool {
 
 var deltas = [3]int{-1, 0, 1}
 
+// Grid operations:
+//
+//	p-X-1   p-X   p-X+1
+//	 p-1     p     p+1
+//	p+X-1   p+X   p+X+1
+//
+// Limits:
+//
+//	X = total cols
+//	Y = total rows
+//
+//	- p % X == 0       => left
+//	- p % X == X-1     => right
+//	- p < Y            => up
+//	- p >= X * Y - X   => down
 func CalcNeighs(p, X, Y int, grid []bool) int {
 	neighs := 0
 	for _, yd := range deltas {
